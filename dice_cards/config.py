@@ -7,6 +7,7 @@ CONFIG_FILE = Path.home() / ".local" / "share" / "dice-cards" / "config.json"
 
 DEFAULTS = {
     "inline": False,
+    "lonelog": False,
 }
 
 
@@ -30,3 +31,11 @@ def toggle(key: str) -> bool:
     config[key] = not config.get(key, DEFAULTS.get(key, False))
     save_config(config)
     return config[key]
+
+
+def show_config() -> None:
+    """Print all config settings and their status."""
+    config = load_config()
+    for key in DEFAULTS:
+        state = "on" if config.get(key, False) else "off"
+        print(f"  {key}: {state}")

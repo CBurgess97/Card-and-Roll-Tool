@@ -478,7 +478,7 @@ def parse_modifier(mod_str: str) -> int:
     return int(mod_str)
 
 
-def table_main(args: list[str], clip: bool, inline: bool = False) -> None:
+def table_main(args: list[str], clip: bool, inline: bool = False, lonelog: bool = False) -> None:
     """Entry point for 'roll table <file> [table_id] [-m modifier]'."""
     from dice_cards.clipboard import capture
 
@@ -509,5 +509,5 @@ def table_main(args: list[str], clip: bool, inline: bool = False) -> None:
     data = load_table_file(filepath)
     table = find_table(data, table_id)
 
-    with capture(clip):
+    with capture(clip, lonelog):
         roll_on_table(table, data["tables"], modifier=modifier, inline=inline)

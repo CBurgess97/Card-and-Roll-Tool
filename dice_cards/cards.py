@@ -80,20 +80,39 @@ def main() -> None:
 
     from dice_cards.config import load_config
 
-    args = [a for a in sys.argv[1:] if a not in ("-c", "--inline")]
+    flags = ("-c", "--inline", "--lonelog")
+    args = [a for a in sys.argv[1:] if a not in flags]
     clip = "-c" in sys.argv
-    config_inline = load_config().get("inline", False)
-    inline = config_inline ^ ("--inline" in sys.argv)
+    config = load_config()
+    inline = config.get("inline", False) ^ ("--inline" in sys.argv)
+    lonelog = config.get("lonelog", False) ^ ("--lonelog" in sys.argv)
 
     if not args:
-        print("usage: draw [-c] [--inline] <count>    draw cards from the deck", file=sys.stderr)
-        print("       draw shuffle                    shuffle a new deck", file=sys.stderr)
-        print("flags: -c       copy result to clipboard", file=sys.stderr)
-        print("       --inline compact single-line output", file=sys.stderr)
+        print("usage: draw [-c] [--inline] [--lonelog] <count>", file=sys.stderr)
+        print("       draw shuffle   shuffle a new deck", file=sys.stderr)
+        print("       draw config    show config settings", file=sys.stderr)
+        print("flags: -c        copy result to clipboard", file=sys.stderr)
+        print("       --inline  compact single-line output", file=sys.stderr)
+        print("       --lonelog prepend -> for lonelog notation", file=sys.stderr)
         sys.exit(1)
 
     arg = args[0].lower()
-    with capture(clip):
+
+    if arg == "config":
+        from dice_cards.config import show_config, toggle
+        toggled = False
+        for flag in ("--inline", "--lonelog"):
+            if flag in sys.argv:
+                key = flag.lstrip("-")
+                new_val = toggle(key)
+                state = "on" if new_val else "off"
+                print(f"{key}: {state}")
+                toggled = True
+        if not toggled:
+            show_config()
+        return
+
+    with capture(clip, lonelog):
         if arg == "shuffle":
             shuffle_deck()
         elif arg.isdigit():

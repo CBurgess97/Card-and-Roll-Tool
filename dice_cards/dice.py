@@ -135,49 +135,57 @@ def ironsworn_roll(adds: int, inline: bool = False) -> None:
         print(outcome_line)
 
 
-def resolve_inline(flag: bool) -> bool:
-    """Resolve inline setting: --inline flag toggles the config default."""
+def resolve_flags(argv: list[str]) -> tuple[bool, bool]:
+    """Resolve inline and lonelog settings from config and CLI flags."""
     from dice_cards.config import load_config
-    config_inline = load_config().get("inline", False)
-    return config_inline ^ flag
+    config = load_config()
+    inline = config.get("inline", False) ^ ("--inline" in argv)
+    lonelog = config.get("lonelog", False) ^ ("--lonelog" in argv)
+    return inline, lonelog
 
 
 def main() -> None:
     from dice_cards.clipboard import capture
 
-    args = [a for a in sys.argv[1:] if a not in ("-c", "--inline")]
+    flags = ("-c", "--inline", "--lonelog")
+    args = [a for a in sys.argv[1:] if a not in flags]
     clip = "-c" in sys.argv
-    inline = resolve_inline("--inline" in sys.argv)
+    inline, lonelog = resolve_flags(sys.argv)
 
     if not args:
-        print("usage: roll [-c] [--inline] <dice_notation> [dice_notation ...]", file=sys.stderr)
-        print("       roll [-c] [--inline] iron [+adds]   ironsworn move roll", file=sys.stderr)
-        print("       roll [-c] [--inline] table <file> [table_id] [-m mod]", file=sys.stderr)
-        print("       roll config --inline   toggle inline output default", file=sys.stderr)
+        print("usage: roll [-c] [--inline] [--lonelog] <dice> [dice ...]", file=sys.stderr)
+        print("       roll [-c] [--inline] [--lonelog] iron [+adds]", file=sys.stderr)
+        print("       roll [-c] [--inline] [--lonelog] table <file> [id] [-m mod]", file=sys.stderr)
+        print("       roll config --inline|--lonelog   toggle setting", file=sys.stderr)
         print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
         print("          roll iron  roll iron +3", file=sys.stderr)
         print("          roll table monsters.yml -m -1", file=sys.stderr)
-        print("flags:    -c       copy result to clipboard", file=sys.stderr)
-        print("          --inline compact single-line output", file=sys.stderr)
-        print("          -m       modifier for table rolls (+2, -1, 1d6)", file=sys.stderr)
+        print("flags:    -c        copy result to clipboard", file=sys.stderr)
+        print("          --inline  compact single-line output", file=sys.stderr)
+        print("          --lonelog prepend -> for lonelog notation", file=sys.stderr)
+        print("          -m        modifier for table rolls (+2, -1, 1d6)", file=sys.stderr)
         sys.exit(1)
 
     if args[0].lower() == "config":
-        from dice_cards.config import toggle
-        if "--inline" not in sys.argv:
-            print("usage: roll config --inline", file=sys.stderr)
-            sys.exit(1)
-        new_val = toggle("inline")
-        state = "on" if new_val else "off"
-        print(f"inline output: {state}")
+        from dice_cards.config import show_config, toggle
+        toggled = False
+        for flag in ("--inline", "--lonelog"):
+            if flag in sys.argv:
+                key = flag.lstrip("-")
+                new_val = toggle(key)
+                state = "on" if new_val else "off"
+                print(f"{key}: {state}")
+                toggled = True
+        if not toggled:
+            show_config()
         return
 
     if args[0].lower() == "table":
         from dice_cards.tables import table_main
-        table_main(args[1:], clip, inline)
+        table_main(args[1:], clip, inline, lonelog)
         return
 
-    with capture(clip):
+    with capture(clip, lonelog):
         if args[0].lower() == "iron":
             adds = 0
             if len(args) > 1:

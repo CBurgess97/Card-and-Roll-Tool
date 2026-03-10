@@ -30,9 +30,9 @@ def copy_to_clipboard(text: str) -> None:
 
 
 @contextmanager
-def capture(clip: bool):
+def capture(clip: bool, lonelog: bool = False):
     """Context manager that captures stdout. Prints output and optionally copies to clipboard."""
-    if not clip:
+    if not clip and not lonelog:
         yield
         return
 
@@ -44,5 +44,8 @@ def capture(clip: bool):
     finally:
         sys.stdout = old_stdout
         output = buf.getvalue()
+        if lonelog and output:
+            output = "-> " + output
         print(output, end="")
-        copy_to_clipboard(strip_ansi(output).rstrip("\n"))
+        if clip:
+            copy_to_clipboard(strip_ansi(output).rstrip("\n"))
