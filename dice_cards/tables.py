@@ -195,7 +195,7 @@ def match_card_entry(entries: list[dict], card_name: str) -> dict | None:
                     best = entry
                     best_priority = 3
         elif "rank" in on:
-            if card_rank and on["rank"].lower() == card_rank:
+            if card_rank and str(on["rank"]).lower() == card_rank:
                 if best_priority < 2:
                     best = entry
                     best_priority = 2
@@ -267,6 +267,7 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
         cards_config = roll_config["cards"]
         deck = build_deck(cards_config)
         draw_count = cards_config.get("draw", 1)
+        suit_domains = table.get("suit_domains", {})
         random.shuffle(deck)
         drawn = deck[:draw_count]
 
@@ -274,7 +275,17 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
             print(f"{indent}{DIM}{name}{RESET} → {BOLD}{card_name}{RESET}")
             entry = match_card_entry(entries, card_name)
             if entry:
-                print(f"{indent}  {format_result(entry, columns)}")
+                result_text = format_result(entry, columns)
+                # Show suit domain context if defined
+                if suit_domains and " of " in card_name:
+                    suit = card_name.rsplit(" of ", 1)[1].strip().lower()
+                    domain = suit_domains.get(suit)
+                    if domain:
+                        print(f"{indent}  {result_text}  {DIM}[{domain}]{RESET}")
+                    else:
+                        print(f"{indent}  {result_text}")
+                else:
+                    print(f"{indent}  {result_text}")
             else:
                 print(f"{indent}  {DIM}(no matching entry){RESET}")
 
