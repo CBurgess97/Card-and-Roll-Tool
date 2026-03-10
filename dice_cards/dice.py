@@ -135,10 +135,17 @@ def main() -> None:
     if not args:
         print("usage: roll [-c] <dice_notation> [dice_notation ...]", file=sys.stderr)
         print("       roll [-c] iron [+adds]   ironsworn move roll", file=sys.stderr)
+        print("       roll [-c] table <file> [table_id]", file=sys.stderr)
         print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
         print("          roll iron  roll iron +3", file=sys.stderr)
+        print("          roll table monsters.yml", file=sys.stderr)
         print("flags:    -c  copy result to clipboard", file=sys.stderr)
         sys.exit(1)
+
+    if args[0].lower() == "table":
+        from dice_cards.tables import table_main
+        table_main(args[1:], clip)
+        return
 
     with capture(clip):
         if args[0].lower() == "iron":
