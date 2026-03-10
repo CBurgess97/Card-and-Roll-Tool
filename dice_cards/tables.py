@@ -43,7 +43,7 @@ def load_table_file(filepath: str) -> dict:
 
 
 def find_table(data: dict, table_id: str | None) -> dict:
-    """Find a table by id, or return the only table if there's just one."""
+    """Find a table by id, or prompt user to choose if multiple tables exist."""
     tables = data["tables"]
     if table_id:
         needle = table_id.lower()
@@ -54,7 +54,28 @@ def find_table(data: dict, table_id: str | None) -> dict:
         available = ", ".join(f"{t['id']} ({t.get('name', '')})" for t in tables)
         print(f"available tables: {available}", file=sys.stderr)
         sys.exit(1)
-    return tables[0]
+    if len(tables) == 1:
+        return tables[0]
+    # Multiple tables — prompt user to choose
+    print(f"{DIM}Multiple tables available:{RESET}")
+    for i, t in enumerate(tables, 1):
+        name = t.get("name", t["id"])
+        roll_config = t.get("roll", {})
+        roll_type = next(iter(roll_config), "unknown")
+        print(f"  {BOLD}{i}{RESET}. {name} {DIM}[{roll_type}]{RESET}")
+    while True:
+        try:
+            choice = input(f"{DIM}>{RESET} ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit(0)
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(tables):
+                return tables[idx - 1]
+        except ValueError:
+            pass
+        print(f"  enter a number from 1 to {len(tables)}")
 
 
 def roll_fudge(count: int) -> int:
