@@ -1,0 +1,19 @@
+[project]
+name = "dice-cards"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Callum Burgess",email = "callumburgess997@gmail.com"}
+]
+requires-python = ">=3.14"
+dependencies = [
+]
+
+
+[project.scripts]
+roll = "dice_cards.dice:main"
+draw = "dice_cards.cards:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
