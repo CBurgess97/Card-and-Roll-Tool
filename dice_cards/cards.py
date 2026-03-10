@@ -8,10 +8,10 @@ from pathlib import Path
 STATE_FILE = Path.home() / ".local" / "share" / "dice-cards" / "deck.json"
 
 SUITS = {
-    "hearts": ("Hearts", "\u2665", "\033[91m"),
-    "diamonds": ("Diamonds", "\u2666", "\033[91m"),
-    "clubs": ("Clubs", "\u2663", "\033[97m"),
-    "spades": ("Spades", "\u2660", "\033[97m"),
+    "hearts": ("Hearts", "\u2665\ufe0e", "\033[91m"),
+    "diamonds": ("Diamonds", "\u2666\ufe0e", "\033[91m"),
+    "clubs": ("Clubs", "\u2663\ufe0e", "\033[97m"),
+    "spades": ("Spades", "\u2660\ufe0e", "\033[97m"),
 }
 RESET = "\033[0m"
 
