@@ -92,11 +92,59 @@ def roll_dice(notation: str) -> None:
         print(f"total: {grand_total}")
 
 
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+CYAN = "\033[36m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+def ironsworn_roll(adds: int) -> None:
+    """Perform an Ironsworn move roll: 1d6 + adds vs 2d10."""
+    action = random.randint(1, 6)
+    challenge1 = random.randint(1, 10)
+    challenge2 = random.randint(1, 10)
+    score = action + adds
+
+    beats = sum(1 for c in (challenge1, challenge2) if score > c)
+
+    if beats == 2:
+        outcome = f"{GREEN}{BOLD}Strong Hit{RESET}"
+    elif beats == 1:
+        outcome = f"{YELLOW}{BOLD}Weak Hit{RESET}"
+    else:
+        outcome = f"{RED}{BOLD}Miss{RESET}"
+
+    twist = ""
+    if challenge1 == challenge2:
+        twist = f"  {CYAN}⟐ match — narrative twist{RESET}"
+
+    adds_str = f" + {adds}" if adds else ""
+    print(f"action: [{action}]{adds_str} = {score}  vs  challenge: [{challenge1}, {challenge2}]")
+    print(f"→ {outcome}{twist}")
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("usage: roll <dice_notation> [dice_notation ...]", file=sys.stderr)
-        print("examples: roll 2d6  roll d20+5  roll 4d6kh3  roll 2d20kl1", file=sys.stderr)
+        print("       roll iron [+adds]   ironsworn move roll", file=sys.stderr)
+        print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
+        print("          roll iron  roll iron +3", file=sys.stderr)
         sys.exit(1)
+
+    if sys.argv[1].lower() == "iron":
+        adds = 0
+        if len(sys.argv) > 2:
+            raw = sys.argv[2].lstrip("+")
+            try:
+                adds = int(raw)
+            except ValueError:
+                print(f"error: invalid adds '{sys.argv[2]}'", file=sys.stderr)
+                sys.exit(1)
+        ironsworn_roll(adds)
+        return
 
     for notation in sys.argv[1:]:
         roll_dice(notation)
