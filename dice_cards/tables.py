@@ -40,15 +40,7 @@ def find_table(data: dict, table_id: str | None) -> dict:
         available = ", ".join(t["id"] for t in tables)
         print(f"available tables: {available}", file=sys.stderr)
         sys.exit(1)
-    if len(tables) == 1:
-        return tables[0]
-    # Multiple tables — list them
-    print(f"{BOLD}tables in this file:{RESET}")
-    for t in tables:
-        desc = f"  {DIM}{t.get('description', '')}{RESET}" if t.get("description") else ""
-        print(f"  {CYAN}{t['id']}{RESET} — {t['name']}{desc}")
-    print(f"\nusage: roll table <file> <table_id>")
-    sys.exit(0)
+    return tables[0]
 
 
 def roll_fudge(count: int) -> int:
