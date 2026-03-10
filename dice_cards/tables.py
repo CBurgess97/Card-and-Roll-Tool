@@ -23,7 +23,20 @@ def load_table_file(filepath: str) -> dict:
         sys.exit(1)
     with open(path) as f:
         data = yaml.safe_load(f)
-    if not isinstance(data, dict) or "tables" not in data:
+    if not isinstance(data, dict):
+        print("error: invalid table file", file=sys.stderr)
+        sys.exit(1)
+    # Normalize singular 'table' key to 'tables' array
+    if "table" in data and "tables" not in data:
+        data["tables"] = [data.pop("table")]
+    # Normalize 'dice'/'cards'/'weighted'/'lookup' shorthand to 'roll' object
+    for t in data.get("tables", []):
+        if "roll" not in t:
+            for key in ("dice", "cards", "weighted", "lookup"):
+                if key in t:
+                    t["roll"] = {key: t.pop(key)}
+                    break
+    if "tables" not in data:
         print("error: invalid table file — missing 'tables' key", file=sys.stderr)
         sys.exit(1)
     return data
