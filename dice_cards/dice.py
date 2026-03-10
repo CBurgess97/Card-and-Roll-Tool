@@ -135,11 +135,12 @@ def main() -> None:
     if not args:
         print("usage: roll [-c] <dice_notation> [dice_notation ...]", file=sys.stderr)
         print("       roll [-c] iron [+adds]   ironsworn move roll", file=sys.stderr)
-        print("       roll [-c] table <file> [table_id]", file=sys.stderr)
+        print("       roll [-c] table <file> [table_id] [-m mod]", file=sys.stderr)
         print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
         print("          roll iron  roll iron +3", file=sys.stderr)
-        print("          roll table monsters.yml", file=sys.stderr)
+        print("          roll table monsters.yml -m -1", file=sys.stderr)
         print("flags:    -c  copy result to clipboard", file=sys.stderr)
+        print("          -m  modifier for table rolls (+2, -1, 1d6)", file=sys.stderr)
         sys.exit(1)
 
     if args[0].lower() == "table":

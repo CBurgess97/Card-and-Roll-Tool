@@ -221,7 +221,34 @@ def format_result(entry: dict, columns: list[dict] | None) -> str:
     return str(result)
 
 
-def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
+def entry_bounds(entries: list[dict]) -> tuple[int, int]:
+    """Find the min and max values covered by dice table entries."""
+    lo, hi = float("inf"), float("-inf")
+    for entry in entries:
+        on = get_on(entry)
+        if on is None:
+            continue
+        if isinstance(on, int):
+            lo, hi = min(lo, on), max(hi, on)
+        elif isinstance(on, str):
+            parts = on.strip().split("-")
+            nums = []
+            i = 0
+            while i < len(parts):
+                if parts[i] == "" and i + 1 < len(parts):
+                    nums.append(-int(parts[i + 1]))
+                    i += 2
+                elif parts[i] == "":
+                    i += 1
+                else:
+                    nums.append(int(parts[i]))
+                    i += 1
+            for n in nums:
+                lo, hi = min(lo, n), max(hi, n)
+    return int(lo), int(hi)
+
+
+def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier: int = 0) -> None:
     """Roll on a table and print the result."""
     indent = "  " * depth
     roll_config = table["roll"]
@@ -231,7 +258,13 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
 
     if "dice" in roll_config:
         notation = roll_config["dice"]
-        result = roll_dice_total(notation)
+        raw = roll_dice_total(notation)
+        result = raw + modifier
+
+        # Clamp to entry bounds
+        if modifier:
+            lo, hi = entry_bounds(entries)
+            result = max(lo, min(hi, result))
 
         # Show fudge dice result with sign
         if "f" in notation.lower():
@@ -239,7 +272,11 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
         else:
             result_display = str(result)
 
-        print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{result_display}{RESET}")
+        mod_str = ""
+        if modifier:
+            sign = "+" if modifier > 0 else "-"
+            mod_str = f" {sign} {abs(modifier)} = {result}"
+        print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{raw}{mod_str}{RESET}")
 
         entry = match_dice_entry(entries, result)
         if not entry:
@@ -306,19 +343,45 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0) -> None:
         sys.exit(1)
 
 
+def parse_modifier(mod_str: str) -> int:
+    """Parse a modifier string like '+2', '-1', or '1d6' into an integer."""
+    mod_str = mod_str.strip()
+    if "d" in mod_str.lower():
+        # Dice notation modifier — roll it
+        return roll_dice_total(mod_str)
+    return int(mod_str)
+
+
 def table_main(args: list[str], clip: bool) -> None:
-    """Entry point for 'roll table <file> [table_id]'."""
+    """Entry point for 'roll table <file> [table_id] [-m modifier]'."""
     from dice_cards.clipboard import capture
 
-    if not args:
-        print("usage: roll table <file> [table_id]", file=sys.stderr)
+    # Extract -m flag
+    modifier = 0
+    filtered = []
+    i = 0
+    while i < len(args):
+        if args[i] == "-m" and i + 1 < len(args):
+            try:
+                modifier = parse_modifier(args[i + 1])
+            except (ValueError, SystemExit):
+                print(f"error: invalid modifier '{args[i + 1]}'", file=sys.stderr)
+                sys.exit(1)
+            i += 2
+        else:
+            filtered.append(args[i])
+            i += 1
+
+    if not filtered:
+        print("usage: roll table <file> [table_id] [-m modifier]", file=sys.stderr)
+        print("       modifier can be a number (+2, -1) or dice (1d6)", file=sys.stderr)
         sys.exit(1)
 
-    filepath = args[0]
-    table_id = args[1] if len(args) > 1 else None
+    filepath = filtered[0]
+    table_id = filtered[1] if len(filtered) > 1 else None
 
     data = load_table_file(filepath)
     table = find_table(data, table_id)
 
     with capture(clip):
-        roll_on_table(table, data["tables"])
+        roll_on_table(table, data["tables"], modifier=modifier)
