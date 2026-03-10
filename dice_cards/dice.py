@@ -40,10 +40,11 @@ def parse_dice(notation: str) -> list[dict]:
     return parts
 
 
-def roll_dice(notation: str) -> None:
-    """Roll dice and print results."""
+def roll_dice(notation: str) -> str:
+    """Roll dice and return formatted results."""
     parts = parse_dice(notation)
     grand_total = 0
+    lines = []
 
     for part in parts:
         count = part["count"]
@@ -86,10 +87,12 @@ def roll_dice(notation: str) -> None:
         if part["modifier"]:
             mod_str = f" {'+' if part['modifier'] > 0 else '-'} {abs(part['modifier'])}"
 
-        print(f"{label}: [{detail}]{mod_str} = {total}")
+        lines.append(f"{label}: [{detail}]{mod_str} = {total}")
 
     if len(parts) > 1:
-        print(f"total: {grand_total}")
+        lines.append(f"total: {grand_total}")
+
+    return "\n".join(lines)
 
 
 BOLD = "\033[1m"
@@ -101,7 +104,7 @@ DIM = "\033[2m"
 RESET = "\033[0m"
 
 
-def ironsworn_roll(adds: int) -> None:
+def ironsworn_roll(adds: int, inline: bool = False) -> None:
     """Perform an Ironsworn move roll: 1d6 + adds vs 2d10."""
     action = random.randint(1, 6)
     challenge1 = random.randint(1, 10)
@@ -122,30 +125,56 @@ def ironsworn_roll(adds: int) -> None:
         twist = f"  {CYAN}⟐ match — narrative twist{RESET}"
 
     adds_str = f" + {adds}" if adds else ""
-    print(f"action: [{action}]{adds_str} = {score}  vs  challenge: [{challenge1}, {challenge2}]")
-    print(f"→ {outcome}{twist}")
+    action_line = f"action: [{action}]{adds_str} = {score}  vs  challenge: [{challenge1}, {challenge2}]"
+    outcome_line = f"→ {outcome}{twist}"
+
+    if inline:
+        print(f"{action_line}  {outcome_line}")
+    else:
+        print(action_line)
+        print(outcome_line)
+
+
+def resolve_inline(flag: bool) -> bool:
+    """Resolve inline setting: --inline flag toggles the config default."""
+    from dice_cards.config import load_config
+    config_inline = load_config().get("inline", False)
+    return config_inline ^ flag
 
 
 def main() -> None:
     from dice_cards.clipboard import capture
 
-    args = [a for a in sys.argv[1:] if a != "-c"]
+    args = [a for a in sys.argv[1:] if a not in ("-c", "--inline")]
     clip = "-c" in sys.argv
+    inline = resolve_inline("--inline" in sys.argv)
 
     if not args:
-        print("usage: roll [-c] <dice_notation> [dice_notation ...]", file=sys.stderr)
-        print("       roll [-c] iron [+adds]   ironsworn move roll", file=sys.stderr)
-        print("       roll [-c] table <file> [table_id] [-m mod]", file=sys.stderr)
+        print("usage: roll [-c] [--inline] <dice_notation> [dice_notation ...]", file=sys.stderr)
+        print("       roll [-c] [--inline] iron [+adds]   ironsworn move roll", file=sys.stderr)
+        print("       roll [-c] [--inline] table <file> [table_id] [-m mod]", file=sys.stderr)
+        print("       roll config --inline   toggle inline output default", file=sys.stderr)
         print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
         print("          roll iron  roll iron +3", file=sys.stderr)
         print("          roll table monsters.yml -m -1", file=sys.stderr)
-        print("flags:    -c  copy result to clipboard", file=sys.stderr)
-        print("          -m  modifier for table rolls (+2, -1, 1d6)", file=sys.stderr)
+        print("flags:    -c       copy result to clipboard", file=sys.stderr)
+        print("          --inline compact single-line output", file=sys.stderr)
+        print("          -m       modifier for table rolls (+2, -1, 1d6)", file=sys.stderr)
         sys.exit(1)
+
+    if args[0].lower() == "config":
+        from dice_cards.config import toggle
+        if "--inline" not in sys.argv:
+            print("usage: roll config --inline", file=sys.stderr)
+            sys.exit(1)
+        new_val = toggle("inline")
+        state = "on" if new_val else "off"
+        print(f"inline output: {state}")
+        return
 
     if args[0].lower() == "table":
         from dice_cards.tables import table_main
-        table_main(args[1:], clip)
+        table_main(args[1:], clip, inline)
         return
 
     with capture(clip):
@@ -158,11 +187,14 @@ def main() -> None:
                 except ValueError:
                     print(f"error: invalid adds '{args[1]}'", file=sys.stderr)
                     sys.exit(1)
-            ironsworn_roll(adds)
+            ironsworn_roll(adds, inline)
             return
 
-        for notation in args:
-            roll_dice(notation)
+        results = [roll_dice(notation) for notation in args]
+        if inline:
+            print(", ".join(results))
+        else:
+            print("\n".join(results))
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ def format_card(card: str) -> str:
     return card
 
 
-def draw_cards(n: int) -> None:
+def draw_cards(n: int, inline: bool = False) -> None:
     """Draw n cards from the deck."""
     deck = load_deck()
     if not deck:
@@ -61,8 +61,11 @@ def draw_cards(n: int) -> None:
     save_deck(remaining)
 
     formatted = [format_card(c) for c in drawn]
-    print("  ".join(formatted))
-    print(f"({len(remaining)} cards remaining)")
+    if inline:
+        print("  ".join(formatted))
+    else:
+        print("  ".join(formatted))
+        print(f"({len(remaining)} cards remaining)")
 
 
 def shuffle_deck() -> None:
@@ -75,13 +78,18 @@ def shuffle_deck() -> None:
 def main() -> None:
     from dice_cards.clipboard import capture
 
-    args = [a for a in sys.argv[1:] if a != "-c"]
+    from dice_cards.config import load_config
+
+    args = [a for a in sys.argv[1:] if a not in ("-c", "--inline")]
     clip = "-c" in sys.argv
+    config_inline = load_config().get("inline", False)
+    inline = config_inline ^ ("--inline" in sys.argv)
 
     if not args:
-        print("usage: draw [-c] <count>    draw cards from the deck", file=sys.stderr)
-        print("       draw shuffle         shuffle a new deck", file=sys.stderr)
-        print("flags: -c  copy result to clipboard", file=sys.stderr)
+        print("usage: draw [-c] [--inline] <count>    draw cards from the deck", file=sys.stderr)
+        print("       draw shuffle                    shuffle a new deck", file=sys.stderr)
+        print("flags: -c       copy result to clipboard", file=sys.stderr)
+        print("       --inline compact single-line output", file=sys.stderr)
         sys.exit(1)
 
     arg = args[0].lower()
@@ -89,7 +97,7 @@ def main() -> None:
         if arg == "shuffle":
             shuffle_deck()
         elif arg.isdigit():
-            draw_cards(int(arg))
+            draw_cards(int(arg), inline)
         else:
             print(f"error: expected a number or 'shuffle', got '{arg}'", file=sys.stderr)
             sys.exit(1)

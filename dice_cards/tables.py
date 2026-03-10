@@ -230,15 +230,19 @@ def match_card_entry(entries: list[dict], card_name: str) -> dict | None:
     return best
 
 
-def format_result(entry: dict, columns: list[dict] | None) -> str:
+def format_result(entry: dict, columns: list[dict] | None, inline: bool = False) -> str:
     """Format an entry's result for display."""
     result = entry["result"]
     if isinstance(result, dict) and columns:
         parts = []
         for col in columns:
             val = result.get(col["id"], "")
-            parts.append(f"  {BOLD}{col['name']}{RESET}: {val}")
-        return "\n".join(parts)
+            if inline:
+                parts.append(f"{col['name']}: {val}")
+            else:
+                parts.append(f"  {BOLD}{col['name']}{RESET}: {val}")
+        sep = ", " if inline else "\n"
+        return sep.join(parts)
     return str(result)
 
 
@@ -269,7 +273,7 @@ def entry_bounds(entries: list[dict]) -> tuple[int, int]:
     return int(lo), int(hi)
 
 
-def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier: int = 0) -> None:
+def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier: int = 0, inline: bool = False) -> None:
     """Roll on a table and print the result."""
     indent = "  " * depth
     roll_config = table["roll"]
@@ -297,30 +301,43 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
         if modifier:
             sign = "+" if modifier > 0 else "-"
             mod_str = f" {sign} {abs(modifier)} = {result}"
-        print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{raw}{mod_str}{RESET}")
 
         entry = match_dice_entry(entries, result)
-        if not entry:
-            print(f"{indent}  (no matching entry for {result})")
-            return
 
-        if entry.get("reroll"):
-            print(f"{indent}  reroll!")
-            roll_on_table(table, all_tables, depth)
-            return
-
-        print(f"{indent}  {format_result(entry, columns)}")
+        if inline:
+            header = f"{name} [{notation}] → {raw}{mod_str}"
+            if not entry:
+                print(f"{header}: (no match)")
+                return
+            if entry.get("reroll"):
+                roll_on_table(table, all_tables, depth, inline=inline)
+                return
+            result_text = format_result(entry, columns, inline=True)
+            print(f"{header}: {result_text}")
+        else:
+            print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{raw}{mod_str}{RESET}")
+            if not entry:
+                print(f"{indent}  (no matching entry for {result})")
+                return
+            if entry.get("reroll"):
+                print(f"{indent}  reroll!")
+                roll_on_table(table, all_tables, depth)
+                return
+            print(f"{indent}  {format_result(entry, columns)}")
 
         if "subtable" in entry:
-            roll_on_table(entry["subtable"], all_tables, depth + 1)
+            roll_on_table(entry["subtable"], all_tables, depth + 1, inline=inline)
         if "ref" in entry:
             ref_id = entry["ref"]
             for t in all_tables:
                 if t["id"] == ref_id:
-                    roll_on_table(t, all_tables, depth + 1)
+                    roll_on_table(t, all_tables, depth + 1, inline=inline)
                     break
             else:
-                print(f"{indent}  {DIM}(ref '{ref_id}' not found){RESET}")
+                if inline:
+                    print(f"(ref '{ref_id}' not found)")
+                else:
+                    print(f"{indent}  {DIM}(ref '{ref_id}' not found){RESET}")
 
     elif "cards" in roll_config:
         cards_config = roll_config["cards"]
@@ -331,77 +348,121 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
         drawn = deck[:draw_count]
 
         for card_name in drawn:
-            print(f"{indent}{DIM}{name}{RESET} → {BOLD}{card_name}{RESET}")
             entry = match_card_entry(entries, card_name)
-            if entry:
-                result_text = format_result(entry, columns)
-                # Show suit domain context if defined
-                if suit_domains and " of " in card_name:
-                    suit = card_name.rsplit(" of ", 1)[1].strip().lower()
-                    domain = suit_domains.get(suit)
-                    if domain:
-                        print(f"{indent}  {result_text}  {DIM}[{domain}]{RESET}")
+            if inline:
+                header = f"{name} → {card_name}"
+                if entry:
+                    result_text = format_result(entry, columns, inline=True)
+                    if suit_domains and " of " in card_name:
+                        suit = card_name.rsplit(" of ", 1)[1].strip().lower()
+                        domain = suit_domains.get(suit)
+                        if domain:
+                            print(f"{header}: {result_text} [{domain}]")
+                        else:
+                            print(f"{header}: {result_text}")
+                    else:
+                        print(f"{header}: {result_text}")
+                else:
+                    print(f"{header}: (no match)")
+            else:
+                print(f"{indent}{DIM}{name}{RESET} → {BOLD}{card_name}{RESET}")
+                if entry:
+                    result_text = format_result(entry, columns)
+                    if suit_domains and " of " in card_name:
+                        suit = card_name.rsplit(" of ", 1)[1].strip().lower()
+                        domain = suit_domains.get(suit)
+                        if domain:
+                            print(f"{indent}  {result_text}  {DIM}[{domain}]{RESET}")
+                        else:
+                            print(f"{indent}  {result_text}")
                     else:
                         print(f"{indent}  {result_text}")
                 else:
-                    print(f"{indent}  {result_text}")
-            else:
-                print(f"{indent}  {DIM}(no matching entry){RESET}")
+                    print(f"{indent}  {DIM}(no matching entry){RESET}")
 
     elif "weighted" in roll_config:
         weights = [e.get("weight", 1) for e in entries]
         entry = random.choices(entries, weights=weights, k=1)[0]
-        print(f"{indent}{DIM}{name}{RESET} →")
-        print(f"{indent}  {format_result(entry, columns)}")
+        result_text = format_result(entry, columns, inline=inline)
+        if inline:
+            print(f"{name} → {result_text}")
+        else:
+            print(f"{indent}{DIM}{name}{RESET} →")
+            print(f"{indent}  {result_text}")
 
     elif "lookup" in roll_config:
-        print(f"{indent}{DIM}{name}{RESET} — lookup table (no roll)")
-        for entry in entries:
-            print(f"{indent}  {BOLD}{get_on(entry)}{RESET}: {entry['result']}")
+        if inline:
+            items = [f"{get_on(e)}: {e['result']}" for e in entries]
+            print(f"{name} — {', '.join(items)}")
+        else:
+            print(f"{indent}{DIM}{name}{RESET} — lookup table (no roll)")
+            for entry in entries:
+                print(f"{indent}  {BOLD}{get_on(entry)}{RESET}: {entry['result']}")
 
     elif "split_dice" in roll_config:
         axes = roll_config["split_dice"]
-        dice_summary = " + ".join(a["dice"] for a in axes)
-        print(f"{indent}{DIM}{name}{RESET} [{dice_summary} split]")
-        for axis in axes:
-            axis_notation = axis["dice"]
-            axis_entries = axis["entries"]
-            axis_name = axis.get("name", axis.get("id", "?"))
-            axis_columns = axis.get("columns")
-            raw = roll_dice_total(axis_notation)
 
-            if "f" in axis_notation.lower():
-                result_display = f"+{raw}" if raw > 0 else str(raw)
-            else:
-                result_display = str(raw)
-
-            print(f"{indent}  {DIM}{axis_name}{RESET} [{axis_notation}] → {BOLD}{result_display}{RESET}")
-            entry = match_dice_entry(axis_entries, raw)
-            if not entry:
-                print(f"{indent}    (no matching entry for {result_display})")
-                continue
-
-            if entry.get("reroll"):
-                print(f"{indent}    reroll!")
-                # Re-roll just this axis
+        if inline:
+            parts = []
+            for axis in axes:
+                axis_notation = axis["dice"]
+                axis_entries = axis["entries"]
+                axis_name = axis.get("name", axis.get("id", "?"))
+                axis_columns = axis.get("columns")
                 raw = roll_dice_total(axis_notation)
+
+                entry = match_dice_entry(axis_entries, raw)
+                if entry and entry.get("reroll"):
+                    raw = roll_dice_total(axis_notation)
+                    entry = match_dice_entry(axis_entries, raw)
+
+                if entry:
+                    result_text = format_result(entry, axis_columns, inline=True)
+                    parts.append(f"{axis_name}: {result_text}")
+                else:
+                    parts.append(f"{axis_name}: (no match)")
+            print(f"{name} → {', '.join(parts)}")
+        else:
+            dice_summary = " + ".join(a["dice"] for a in axes)
+            print(f"{indent}{DIM}{name}{RESET} [{dice_summary} split]")
+            for axis in axes:
+                axis_notation = axis["dice"]
+                axis_entries = axis["entries"]
+                axis_name = axis.get("name", axis.get("id", "?"))
+                axis_columns = axis.get("columns")
+                raw = roll_dice_total(axis_notation)
+
+                if "f" in axis_notation.lower():
+                    result_display = f"+{raw}" if raw > 0 else str(raw)
+                else:
+                    result_display = str(raw)
+
+                print(f"{indent}  {DIM}{axis_name}{RESET} [{axis_notation}] → {BOLD}{result_display}{RESET}")
                 entry = match_dice_entry(axis_entries, raw)
                 if not entry:
-                    print(f"{indent}    (no matching entry for {raw})")
+                    print(f"{indent}    (no matching entry for {result_display})")
                     continue
 
-            print(f"{indent}    {format_result(entry, axis_columns)}")
+                if entry.get("reroll"):
+                    print(f"{indent}    reroll!")
+                    raw = roll_dice_total(axis_notation)
+                    entry = match_dice_entry(axis_entries, raw)
+                    if not entry:
+                        print(f"{indent}    (no matching entry for {raw})")
+                        continue
 
-            if "subtable" in entry:
-                roll_on_table(entry["subtable"], all_tables, depth + 2)
-            if "ref" in entry:
-                ref_id = entry["ref"]
-                for t in all_tables:
-                    if t["id"] == ref_id:
-                        roll_on_table(t, all_tables, depth + 2)
-                        break
-                else:
-                    print(f"{indent}    {DIM}(ref '{ref_id}' not found){RESET}")
+                print(f"{indent}    {format_result(entry, axis_columns)}")
+
+                if "subtable" in entry:
+                    roll_on_table(entry["subtable"], all_tables, depth + 2)
+                if "ref" in entry:
+                    ref_id = entry["ref"]
+                    for t in all_tables:
+                        if t["id"] == ref_id:
+                            roll_on_table(t, all_tables, depth + 2)
+                            break
+                    else:
+                        print(f"{indent}    {DIM}(ref '{ref_id}' not found){RESET}")
 
     else:
         print(f"error: unknown roll method in table '{name}'", file=sys.stderr)
@@ -417,7 +478,7 @@ def parse_modifier(mod_str: str) -> int:
     return int(mod_str)
 
 
-def table_main(args: list[str], clip: bool) -> None:
+def table_main(args: list[str], clip: bool, inline: bool = False) -> None:
     """Entry point for 'roll table <file> [table_id] [-m modifier]'."""
     from dice_cards.clipboard import capture
 
@@ -449,4 +510,4 @@ def table_main(args: list[str], clip: bool) -> None:
     table = find_table(data, table_id)
 
     with capture(clip):
-        roll_on_table(table, data["tables"], modifier=modifier)
+        roll_on_table(table, data["tables"], modifier=modifier, inline=inline)
