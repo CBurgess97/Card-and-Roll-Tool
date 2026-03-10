@@ -73,19 +73,26 @@ def shuffle_deck() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("usage: draw <count>    draw cards from the deck", file=sys.stderr)
-        print("       draw shuffle    shuffle a new deck", file=sys.stderr)
+    from dice_cards.clipboard import capture
+
+    args = [a for a in sys.argv[1:] if a != "-c"]
+    clip = "-c" in sys.argv
+
+    if not args:
+        print("usage: draw [-c] <count>    draw cards from the deck", file=sys.stderr)
+        print("       draw shuffle         shuffle a new deck", file=sys.stderr)
+        print("flags: -c  copy result to clipboard", file=sys.stderr)
         sys.exit(1)
 
-    arg = sys.argv[1].lower()
-    if arg == "shuffle":
-        shuffle_deck()
-    elif arg.isdigit():
-        draw_cards(int(arg))
-    else:
-        print(f"error: expected a number or 'shuffle', got '{arg}'", file=sys.stderr)
-        sys.exit(1)
+    arg = args[0].lower()
+    with capture(clip):
+        if arg == "shuffle":
+            shuffle_deck()
+        elif arg.isdigit():
+            draw_cards(int(arg))
+        else:
+            print(f"error: expected a number or 'shuffle', got '{arg}'", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

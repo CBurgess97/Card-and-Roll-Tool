@@ -127,27 +127,34 @@ def ironsworn_roll(adds: int) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("usage: roll <dice_notation> [dice_notation ...]", file=sys.stderr)
-        print("       roll iron [+adds]   ironsworn move roll", file=sys.stderr)
+    from dice_cards.clipboard import capture
+
+    args = [a for a in sys.argv[1:] if a != "-c"]
+    clip = "-c" in sys.argv
+
+    if not args:
+        print("usage: roll [-c] <dice_notation> [dice_notation ...]", file=sys.stderr)
+        print("       roll [-c] iron [+adds]   ironsworn move roll", file=sys.stderr)
         print("examples: roll 2d6  roll d20+5  roll 4d6kh3", file=sys.stderr)
         print("          roll iron  roll iron +3", file=sys.stderr)
+        print("flags:    -c  copy result to clipboard", file=sys.stderr)
         sys.exit(1)
 
-    if sys.argv[1].lower() == "iron":
-        adds = 0
-        if len(sys.argv) > 2:
-            raw = sys.argv[2].lstrip("+")
-            try:
-                adds = int(raw)
-            except ValueError:
-                print(f"error: invalid adds '{sys.argv[2]}'", file=sys.stderr)
-                sys.exit(1)
-        ironsworn_roll(adds)
-        return
+    with capture(clip):
+        if args[0].lower() == "iron":
+            adds = 0
+            if len(args) > 1:
+                raw = args[1].lstrip("+")
+                try:
+                    adds = int(raw)
+                except ValueError:
+                    print(f"error: invalid adds '{args[1]}'", file=sys.stderr)
+                    sys.exit(1)
+            ironsworn_roll(adds)
+            return
 
-    for notation in sys.argv[1:]:
-        roll_dice(notation)
+        for notation in args:
+            roll_dice(notation)
 
 
 if __name__ == "__main__":
