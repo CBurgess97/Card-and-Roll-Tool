@@ -29,10 +29,10 @@ def load_table_file(filepath: str) -> dict:
     # Normalize singular 'table' key to 'tables' array
     if "table" in data and "tables" not in data:
         data["tables"] = [data.pop("table")]
-    # Normalize 'dice'/'cards'/'weighted'/'lookup' shorthand to 'roll' object
+    # Normalize 'dice'/'cards'/'weighted'/'lookup'/'split_dice' shorthand to 'roll' object
     for t in data.get("tables", []):
         if "roll" not in t:
-            for key in ("dice", "cards", "weighted", "lookup"):
+            for key in ("dice", "split_dice", "cards", "weighted", "lookup"):
                 if key in t:
                     t["roll"] = {key: t.pop(key)}
                     break
@@ -253,7 +253,7 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
     indent = "  " * depth
     roll_config = table["roll"]
     columns = table.get("columns")
-    entries = table["entries"]
+    entries = table.get("entries", [])
     name = table.get("name", "Unknown Table")
 
     if "dice" in roll_config:
@@ -337,6 +337,50 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
         print(f"{indent}{DIM}{name}{RESET} — lookup table (no roll)")
         for entry in entries:
             print(f"{indent}  {BOLD}{get_on(entry)}{RESET}: {entry['result']}")
+
+    elif "split_dice" in roll_config:
+        axes = roll_config["split_dice"]
+        dice_summary = " + ".join(a["dice"] for a in axes)
+        print(f"{indent}{DIM}{name}{RESET} [{dice_summary} split]")
+        for axis in axes:
+            axis_notation = axis["dice"]
+            axis_entries = axis["entries"]
+            axis_name = axis.get("name", axis.get("id", "?"))
+            axis_columns = axis.get("columns")
+            raw = roll_dice_total(axis_notation)
+
+            if "f" in axis_notation.lower():
+                result_display = f"+{raw}" if raw > 0 else str(raw)
+            else:
+                result_display = str(raw)
+
+            print(f"{indent}  {DIM}{axis_name}{RESET} [{axis_notation}] → {BOLD}{result_display}{RESET}")
+            entry = match_dice_entry(axis_entries, raw)
+            if not entry:
+                print(f"{indent}    (no matching entry for {result_display})")
+                continue
+
+            if entry.get("reroll"):
+                print(f"{indent}    reroll!")
+                # Re-roll just this axis
+                raw = roll_dice_total(axis_notation)
+                entry = match_dice_entry(axis_entries, raw)
+                if not entry:
+                    print(f"{indent}    (no matching entry for {raw})")
+                    continue
+
+            print(f"{indent}    {format_result(entry, axis_columns)}")
+
+            if "subtable" in entry:
+                roll_on_table(entry["subtable"], all_tables, depth + 2)
+            if "ref" in entry:
+                ref_id = entry["ref"]
+                for t in all_tables:
+                    if t["id"] == ref_id:
+                        roll_on_table(t, all_tables, depth + 2)
+                        break
+                else:
+                    print(f"{indent}    {DIM}(ref '{ref_id}' not found){RESET}")
 
     else:
         print(f"error: unknown roll method in table '{name}'", file=sys.stderr)
