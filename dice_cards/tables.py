@@ -46,11 +46,12 @@ def find_table(data: dict, table_id: str | None) -> dict:
     """Find a table by id, or return the only table if there's just one."""
     tables = data["tables"]
     if table_id:
+        needle = table_id.lower()
         for t in tables:
-            if t["id"] == table_id:
+            if t["id"].lower() == needle or t.get("name", "").lower() == needle:
                 return t
         print(f"error: table '{table_id}' not found", file=sys.stderr)
-        available = ", ".join(t["id"] for t in tables)
+        available = ", ".join(f"{t['id']} ({t.get('name', '')})" for t in tables)
         print(f"available tables: {available}", file=sys.stderr)
         sys.exit(1)
     return tables[0]
