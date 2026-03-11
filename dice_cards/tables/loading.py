@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from dice_cards.tables.formatting import BOLD, DIM, RESET
+from dice_cards.tables.formatting import BOLD, DIM, RESET, _prompt_input
 
 
 def load_table_file(filepath: str) -> dict:
@@ -54,15 +54,15 @@ def find_table(data: dict, table_id: str | None) -> dict:
     if len(groups) == 1 and None not in groups:
         return tables[0]
     # Multiple tables — prompt user to choose
-    print(f"{DIM}Multiple tables available:{RESET}")
+    print(f"{DIM}Multiple tables available:{RESET}", file=sys.stderr)
     for i, t in enumerate(tables, 1):
         name = t.get("name", t["id"])
         roll_config = t.get("roll", {})
         roll_type = next(iter(roll_config), "unknown")
-        print(f"  {BOLD}{i}{RESET}. {name} {DIM}[{roll_type}]{RESET}")
+        print(f"  {BOLD}{i}{RESET}. {name} {DIM}[{roll_type}]{RESET}", file=sys.stderr)
     while True:
         try:
-            choice = input(f"{DIM}>{RESET} ")
+            choice = _prompt_input(f"{DIM}>{RESET} ")
         except (EOFError, KeyboardInterrupt):
             print()
             sys.exit(0)
@@ -72,4 +72,4 @@ def find_table(data: dict, table_id: str | None) -> dict:
                 return tables[idx - 1]
         except ValueError:
             pass
-        print(f"  enter a number from 1 to {len(tables)}")
+        print(f"  enter a number from 1 to {len(tables)}", file=sys.stderr)

@@ -9,14 +9,21 @@ CYAN = "\033[36m"
 RESET = "\033[0m"
 
 
+def _prompt_input(prompt: str) -> str:
+    """Display prompt on stderr and read a line from stdin."""
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    return input()
+
+
 def prompt_column_select(columns: list[dict]) -> dict:
     """Prompt the user to select a column from a list."""
-    print(f"{DIM}Select a column:{RESET}")
+    print(f"{DIM}Select a column:{RESET}", file=sys.stderr)
     for i, col in enumerate(columns, 1):
-        print(f"  {BOLD}{i}{RESET}. {col['name']}")
+        print(f"  {BOLD}{i}{RESET}. {col['name']}", file=sys.stderr)
     while True:
         try:
-            choice = input(f"{DIM}>{RESET} ")
+            choice = _prompt_input(f"{DIM}>{RESET} ")
         except (EOFError, KeyboardInterrupt):
             print()
             sys.exit(0)
@@ -26,18 +33,18 @@ def prompt_column_select(columns: list[dict]) -> dict:
                 return columns[idx - 1]
         except ValueError:
             pass
-        print(f"  enter a number from 1 to {len(columns)}")
+        print(f"  enter a number from 1 to {len(columns)}", file=sys.stderr)
 
 
 def prompt_choice_select(options: list, table_name: str = "") -> str:
     """Prompt the user to select one option from a choice result."""
     label = f"Choose from {table_name}:" if table_name else "Choose a result:"
-    print(f"{DIM}{label}{RESET}")
+    print(f"{DIM}{label}{RESET}", file=sys.stderr)
     for i, opt in enumerate(options, 1):
-        print(f"  {BOLD}{i}{RESET}. {opt}")
+        print(f"  {BOLD}{i}{RESET}. {opt}", file=sys.stderr)
     while True:
         try:
-            choice = input(f"{DIM}>{RESET} ")
+            choice = _prompt_input(f"{DIM}>{RESET} ")
         except (EOFError, KeyboardInterrupt):
             print()
             sys.exit(0)
@@ -47,7 +54,7 @@ def prompt_choice_select(options: list, table_name: str = "") -> str:
                 return str(options[idx - 1])
         except ValueError:
             pass
-        print(f"  enter a number from 1 to {len(options)}")
+        print(f"  enter a number from 1 to {len(options)}", file=sys.stderr)
 
 
 def format_result(entry: dict, columns: list[dict] | None, inline: bool = False,

@@ -118,6 +118,15 @@ class TestFindTable:
             t = find_table(data, None)
         assert t["id"] == "treasure_hoard"
 
+    def test_multi_table_prompt_on_stderr(self, capsys):
+        """Table selection prompt must go to stderr so it's visible when stdout is captured."""
+        data = load_table_file(example_path("nested-subtable.yml"))
+        with patch("builtins.input", return_value="1"):
+            find_table(data, None)
+        captured = capsys.readouterr()
+        assert "Multiple tables" in captured.err
+        assert "Multiple tables" not in captured.out
+
 
 # ---------------------------------------------------------------------------
 # get_on helper
@@ -485,6 +494,17 @@ class TestPromptColumnSelect:
             with pytest.raises(SystemExit):
                 prompt_column_select(columns)
 
+    def test_options_on_stderr_not_stdout(self, capsys):
+        """Column options must go to stderr so they're visible when stdout is captured."""
+        columns = [{"id": "a", "name": "Alpha"}, {"id": "b", "name": "Beta"}]
+        with patch("builtins.input", return_value="1"):
+            prompt_column_select(columns)
+        captured = capsys.readouterr()
+        assert "Alpha" in captured.err
+        assert "Beta" in captured.err
+        assert "Alpha" not in captured.out
+        assert "Beta" not in captured.out
+
 
 # ---------------------------------------------------------------------------
 # Prompt choice select
@@ -520,8 +540,19 @@ class TestPromptChoiceSelect:
     def test_table_name_shown(self, capsys):
         with patch("builtins.input", return_value="1"):
             prompt_choice_select(["A"], table_name="Test Table")
-        out = capsys.readouterr().out
-        assert "Test Table" in out
+        captured = capsys.readouterr()
+        assert "Test Table" in captured.err
+
+    def test_options_on_stderr_not_stdout(self, capsys):
+        """Choice options must go to stderr so they're visible when stdout is captured."""
+        with patch("builtins.input", return_value="1"):
+            prompt_choice_select(["Alpha", "Beta"], table_name="Test")
+        captured = capsys.readouterr()
+        # Options should appear on stderr, not stdout
+        assert "Alpha" in captured.err
+        assert "Beta" in captured.err
+        assert "Alpha" not in captured.out
+        assert "Beta" not in captured.out
 
     def test_choice_prompts_during_roll(self, capsys):
         """Choice mode should prompt user instead of just listing options."""
@@ -988,10 +1019,10 @@ class TestSelectColumnMode:
         table = data["tables"][0]
         with patch("builtins.input", return_value="1"):
             roll_on_table(table, data["tables"], inline=True)
-        out = capsys.readouterr().out
-        assert "Select a column" in out
+        captured = capsys.readouterr()
+        assert "Select a column" in captured.err
         human_names = {"Aldric", "Bera", "Cassius", "Duna", "Elowen", "Falk", "Grenna", "Henrik"}
-        assert any(name in out for name in human_names)
+        assert any(name in captured.out for name in human_names)
 
     def test_select_column_multiline(self, capsys):
         random.seed(42)
