@@ -129,7 +129,15 @@ def match_dice_entry(entries: list[dict], roll_result: int) -> dict | None:
                 return entry
         elif isinstance(on, str):
             on = on.strip()
-            if "-" in on:
+            # Threshold: "6+" means 6 or higher
+            if on.endswith("+"):
+                if roll_result >= int(on[:-1]):
+                    return entry
+            # Threshold: "3-" means 3 or lower, "-1-" means -1 or lower
+            elif on.endswith("-"):
+                if roll_result <= int(on[:-1]):
+                    return entry
+            elif "-" in on:
                 # Handle negative numbers in ranges (e.g. "-2--1", "-4")
                 parts = on.split("-")
                 # Reassemble considering negative signs
@@ -290,7 +298,17 @@ def entry_bounds(entries: list[dict]) -> tuple[int, int]:
         if isinstance(on, int):
             lo, hi = min(lo, on), max(hi, on)
         elif isinstance(on, str):
-            parts = on.strip().split("-")
+            on_s = on.strip()
+            # Strip threshold suffixes for bounds calculation
+            if on_s.endswith("+"):
+                n = int(on_s[:-1])
+                lo, hi = min(lo, n), max(hi, n)
+                continue
+            if on_s.endswith("-"):
+                n = int(on_s[:-1])
+                lo, hi = min(lo, n), max(hi, n)
+                continue
+            parts = on_s.split("-")
             nums = []
             i = 0
             while i < len(parts):
@@ -355,7 +373,7 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
                                  selected_column=selected_column, column_mode=column_mode)
 
         if inline:
-            header = f"{name} [{notation}] → {raw}{mod_str}"
+            header = f"{name} [{notation}] → {result_display}{mod_str}"
             if not entry:
                 print(f"{header}: (no match)")
                 return
@@ -366,7 +384,7 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
                                         selected_column=selected_column, column_mode=column_mode)
             print(f"{header}: {result_text}")
         else:
-            print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{raw}{mod_str}{RESET}")
+            print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{result_display}{mod_str}{RESET}")
             if not entry:
                 print(f"{indent}  (no matching entry for {result})")
                 return
