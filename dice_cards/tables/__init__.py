@@ -8,7 +8,7 @@ from dice_cards.tables.rolling import (
     resolve_roll, register_roll, ROLL_HANDLERS,
 )
 from dice_cards.tables.result import RollResult
-from dice_cards.tables.formatting import format_result, prompt_column_select, BOLD, DIM, CYAN, RESET
+from dice_cards.tables.formatting import format_result, prompt_column_select, prompt_choice_select, BOLD, DIM, CYAN, RESET
 from dice_cards.tables.output import format_roll_output, register_formatter, FORMATTERS
 from dice_cards.tables.combine import roll_combine_group
 from dice_cards.tables.cli import parse_modifier, table_main
@@ -20,7 +20,7 @@ __all__ = [
     "roll_on_table", "roll_fudge", "roll_dice_total",
     "resolve_roll", "register_roll", "ROLL_HANDLERS",
     "RollResult",
-    "format_result", "prompt_column_select",
+    "format_result", "prompt_column_select", "prompt_choice_select",
     "format_roll_output", "register_formatter", "FORMATTERS",
     "roll_combine_group",
     "parse_modifier", "table_main",

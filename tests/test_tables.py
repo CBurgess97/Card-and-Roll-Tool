@@ -20,6 +20,7 @@ from dice_cards.tables import (
     roll_on_table,
     roll_combine_group,
     prompt_column_select,
+    prompt_choice_select,
     parse_modifier,
 )
 
@@ -481,6 +482,65 @@ class TestPromptColumnSelect:
         with patch("builtins.input", side_effect=EOFError):
             with pytest.raises(SystemExit):
                 prompt_column_select(columns)
+
+
+# ---------------------------------------------------------------------------
+# Prompt choice select
+# ---------------------------------------------------------------------------
+
+
+class TestPromptChoiceSelect:
+    """Tests for prompt_choice_select()."""
+
+    def test_valid_selection(self, capsys):
+        options = ["Aldric", "Aldwin"]
+        with patch("builtins.input", return_value="1"):
+            result = prompt_choice_select(options)
+        assert result == "Aldric"
+
+    def test_second_option(self, capsys):
+        options = ["Bera", "Brynn"]
+        with patch("builtins.input", return_value="2"):
+            result = prompt_choice_select(options)
+        assert result == "Brynn"
+
+    def test_invalid_then_valid(self, capsys):
+        options = ["A", "B", "C"]
+        with patch("builtins.input", side_effect=["x", "0", "2"]):
+            result = prompt_choice_select(options)
+        assert result == "B"
+
+    def test_eof_exits(self):
+        with patch("builtins.input", side_effect=EOFError):
+            with pytest.raises(SystemExit):
+                prompt_choice_select(["A", "B"])
+
+    def test_table_name_shown(self, capsys):
+        with patch("builtins.input", return_value="1"):
+            prompt_choice_select(["A"], table_name="Test Table")
+        out = capsys.readouterr().out
+        assert "Test Table" in out
+
+    def test_choice_prompts_during_roll(self, capsys):
+        """Choice mode should prompt user instead of just listing options."""
+        random.seed(42)
+        data = load_table_file(example_path("prefix-suffix-choice.yml"))
+        table = data["tables"][0]
+        with patch("dice_cards.tables.rolling.prompt_choice_select", return_value="Aldric") as mock:
+            roll_on_table(table, data["tables"], inline=True)
+            mock.assert_called_once()
+        out = capsys.readouterr().out
+        assert "Aldric" in out
+
+    def test_choice_prompts_during_combine(self, capsys):
+        """Prefix-suffix choice tables should prompt for both parts."""
+        random.seed(42)
+        data = load_table_file(example_path("prefix-suffix-choice.yml"))
+        tables = data["tables"]
+        group_tables = [t for t in tables if t.get("combine", {}).get("group") == "human_name"]
+        with patch("dice_cards.tables.rolling.prompt_choice_select", return_value="X") as mock:
+            roll_combine_group(group_tables, tables, inline=True)
+            assert mock.call_count == 2  # once for prefix, once for suffix
 
 
 # ---------------------------------------------------------------------------
@@ -1116,23 +1176,22 @@ class TestPrefixSuffixChoice:
         data = load_table_file(example_path("prefix-suffix-choice.yml"))
         tables = data["tables"]
         group_tables = [t for t in tables if t.get("combine", {}).get("group") == "human_name"]
-        roll_combine_group(group_tables, tables, inline=True)
+        with patch("dice_cards.tables.rolling.prompt_choice_select", return_value="Aldric"):
+            roll_combine_group(group_tables, tables, inline=True)
         out = capsys.readouterr().out
         assert "human_name" in out
-        # Choice results should be parenthesised
-        assert "(" in out
-        assert "/" in out
+        assert "Aldric" in out
 
     def test_combine_choice_multiline(self, capsys):
         random.seed(42)
         data = load_table_file(example_path("prefix-suffix-choice.yml"))
         tables = data["tables"]
         group_tables = [t for t in tables if t.get("combine", {}).get("group") == "human_name"]
-        roll_combine_group(group_tables, tables, inline=False)
+        with patch("dice_cards.tables.rolling.prompt_choice_select", return_value="Bera"):
+            roll_combine_group(group_tables, tables, inline=False)
         out = capsys.readouterr().out
-        assert "Human First Name" in out
-        assert "Human Surname" in out
-        assert "/" in out
+        assert "human_name" in out
+        assert "Bera" in out
 
 
 # ---------------------------------------------------------------------------
@@ -1183,8 +1242,9 @@ class TestReturnResultMode:
         random.seed(42)
         data = load_table_file(example_path("prefix-suffix-choice.yml"))
         table = data["tables"][0]
-        result = roll_on_table(table, data["tables"], _return_result=True)
-        assert "/" in result  # inline choice format
+        with patch("dice_cards.tables.rolling.prompt_choice_select", return_value="Aldric"):
+            result = roll_on_table(table, data["tables"], _return_result=True)
+        assert result == "Aldric"
 
 
 # ---------------------------------------------------------------------------

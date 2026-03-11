@@ -29,6 +29,27 @@ def prompt_column_select(columns: list[dict]) -> dict:
         print(f"  enter a number from 1 to {len(columns)}")
 
 
+def prompt_choice_select(options: list, table_name: str = "") -> str:
+    """Prompt the user to select one option from a choice result."""
+    label = f"Choose from {table_name}:" if table_name else "Choose a result:"
+    print(f"{DIM}{label}{RESET}")
+    for i, opt in enumerate(options, 1):
+        print(f"  {BOLD}{i}{RESET}. {opt}")
+    while True:
+        try:
+            choice = input(f"{DIM}>{RESET} ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit(0)
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(options):
+                return str(options[idx - 1])
+        except ValueError:
+            pass
+        print(f"  enter a number from 1 to {len(options)}")
+
+
 def format_result(entry: dict, columns: list[dict] | None, inline: bool = False,
                   selected_column: dict | None = None, column_mode: str | None = None) -> str:
     """Format an entry's result for display."""

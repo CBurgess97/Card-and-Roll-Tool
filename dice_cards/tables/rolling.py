@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dice_cards.dice import parse_dice
 from dice_cards.tables.cards_data import build_deck
 from dice_cards.tables.matching import get_on, match_dice_entry, match_card_entry, entry_bounds
-from dice_cards.tables.formatting import format_result, prompt_column_select
+from dice_cards.tables.formatting import format_result, prompt_column_select, prompt_choice_select
 from dice_cards.tables.result import RollResult
 
 
@@ -287,6 +287,14 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
         selected_column = prompt_column_select(columns)
 
     result = resolve_roll(table, all_tables, modifier, selected_column)
+
+    # Prompt for choice selection if needed
+    if result.column_mode == "choice" and result.entry and isinstance(result.entry.get("result"), list):
+        options = result.entry["result"]
+        selected = prompt_choice_select(options, result.table_name)
+        result.entry = dict(result.entry)
+        result.entry["result"] = selected
+        result.column_mode = None
 
     if _return_result:
         if result.entry:
