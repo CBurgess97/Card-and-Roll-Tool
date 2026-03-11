@@ -56,6 +56,10 @@ def find_table(data: dict, table_id: str | None) -> dict:
         sys.exit(1)
     if len(tables) == 1:
         return tables[0]
+    # If all tables share the same combine group, return the first (they'll all be rolled together)
+    groups = {t.get("combine", {}).get("group") for t in tables}
+    if len(groups) == 1 and None not in groups:
+        return tables[0]
     # Multiple tables — prompt user to choose
     print(f"{DIM}Multiple tables available:{RESET}")
     for i, t in enumerate(tables, 1):
@@ -230,9 +234,39 @@ def match_card_entry(entries: list[dict], card_name: str) -> dict | None:
     return best
 
 
-def format_result(entry: dict, columns: list[dict] | None, inline: bool = False) -> str:
+def prompt_column_select(columns: list[dict]) -> dict:
+    """Prompt the user to select a column from a list."""
+    print(f"{DIM}Select a column:{RESET}")
+    for i, col in enumerate(columns, 1):
+        print(f"  {BOLD}{i}{RESET}. {col['name']}")
+    while True:
+        try:
+            choice = input(f"{DIM}>{RESET} ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit(0)
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(columns):
+                return columns[idx - 1]
+        except ValueError:
+            pass
+        print(f"  enter a number from 1 to {len(columns)}")
+
+
+def format_result(entry: dict, columns: list[dict] | None, inline: bool = False,
+                  selected_column: dict | None = None, column_mode: str | None = None) -> str:
     """Format an entry's result for display."""
     result = entry["result"]
+    # Choice mode — result is an array of options
+    if column_mode == "choice" and isinstance(result, list):
+        if inline:
+            return " / ".join(str(r) for r in result)
+        parts = [f"  {BOLD}{i}{RESET}. {r}" for i, r in enumerate(result, 1)]
+        return "\n".join(parts)
+    # Select mode — show only the selected column's value
+    if selected_column and isinstance(result, dict):
+        return str(result.get(selected_column["id"], ""))
     if isinstance(result, dict) and columns:
         parts = []
         for col in columns:
@@ -273,13 +307,20 @@ def entry_bounds(entries: list[dict]) -> tuple[int, int]:
     return int(lo), int(hi)
 
 
-def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier: int = 0, inline: bool = False) -> None:
-    """Roll on a table and print the result."""
+def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier: int = 0,
+                   inline: bool = False, selected_column: dict | None = None,
+                   _return_result: bool = False) -> str | None:
+    """Roll on a table and print the result. If _return_result is True, return the result string instead of printing."""
     indent = "  " * depth
     roll_config = table["roll"]
     columns = table.get("columns")
+    column_mode = table.get("column_mode")
     entries = table.get("entries", [])
     name = table.get("name", "Unknown Table")
+
+    # Prompt for column selection if needed and not already selected
+    if column_mode == "select" and columns and not selected_column and not _return_result:
+        selected_column = prompt_column_select(columns)
 
     if "dice" in roll_config:
         notation = roll_config["dice"]
@@ -304,15 +345,25 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
 
         entry = match_dice_entry(entries, result)
 
+        if _return_result:
+            if not entry or entry.get("reroll"):
+                if entry and entry.get("reroll"):
+                    return roll_on_table(table, all_tables, depth, inline=inline,
+                                         selected_column=selected_column, _return_result=True)
+                return "(no match)"
+            return format_result(entry, columns, inline=True,
+                                 selected_column=selected_column, column_mode=column_mode)
+
         if inline:
             header = f"{name} [{notation}] → {raw}{mod_str}"
             if not entry:
                 print(f"{header}: (no match)")
                 return
             if entry.get("reroll"):
-                roll_on_table(table, all_tables, depth, inline=inline)
+                roll_on_table(table, all_tables, depth, inline=inline, selected_column=selected_column)
                 return
-            result_text = format_result(entry, columns, inline=True)
+            result_text = format_result(entry, columns, inline=True,
+                                        selected_column=selected_column, column_mode=column_mode)
             print(f"{header}: {result_text}")
         else:
             print(f"{indent}{DIM}{name}{RESET} [{notation}] → {BOLD}{raw}{mod_str}{RESET}")
@@ -321,9 +372,9 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
                 return
             if entry.get("reroll"):
                 print(f"{indent}  reroll!")
-                roll_on_table(table, all_tables, depth)
+                roll_on_table(table, all_tables, depth, selected_column=selected_column)
                 return
-            print(f"{indent}  {format_result(entry, columns)}")
+            print(f"{indent}  {format_result(entry, columns, selected_column=selected_column, column_mode=column_mode)}")
 
         if "subtable" in entry:
             roll_on_table(entry["subtable"], all_tables, depth + 1, inline=inline)
@@ -349,10 +400,18 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
 
         for card_name in drawn:
             entry = match_card_entry(entries, card_name)
+
+            if _return_result:
+                if entry:
+                    return format_result(entry, columns, inline=True,
+                                         selected_column=selected_column, column_mode=column_mode)
+                return "(no match)"
+
             if inline:
                 header = f"{name} → {card_name}"
                 if entry:
-                    result_text = format_result(entry, columns, inline=True)
+                    result_text = format_result(entry, columns, inline=True,
+                                                selected_column=selected_column, column_mode=column_mode)
                     if suit_domains and " of " in card_name:
                         suit = card_name.rsplit(" of ", 1)[1].strip().lower()
                         domain = suit_domains.get(suit)
@@ -367,7 +426,8 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
             else:
                 print(f"{indent}{DIM}{name}{RESET} → {BOLD}{card_name}{RESET}")
                 if entry:
-                    result_text = format_result(entry, columns)
+                    result_text = format_result(entry, columns,
+                                                selected_column=selected_column, column_mode=column_mode)
                     if suit_domains and " of " in card_name:
                         suit = card_name.rsplit(" of ", 1)[1].strip().lower()
                         domain = suit_domains.get(suit)
@@ -383,7 +443,13 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
     elif "weighted" in roll_config:
         weights = [e.get("weight", 1) for e in entries]
         entry = random.choices(entries, weights=weights, k=1)[0]
-        result_text = format_result(entry, columns, inline=inline)
+
+        if _return_result:
+            return format_result(entry, columns, inline=True,
+                                 selected_column=selected_column, column_mode=column_mode)
+
+        result_text = format_result(entry, columns, inline=inline,
+                                    selected_column=selected_column, column_mode=column_mode)
         if inline:
             print(f"{name} → {result_text}")
         else:
@@ -469,6 +535,61 @@ def roll_on_table(table: dict, all_tables: list[dict], depth: int = 0, modifier:
         sys.exit(1)
 
 
+def roll_combine_group(tables: list[dict], all_tables: list[dict], inline: bool = False) -> None:
+    """Roll all tables in a combine group and join prefix + suffix."""
+    # Sort into prefix and suffix
+    prefix_table = None
+    suffix_table = None
+    for t in tables:
+        role = t["combine"]["role"]
+        if role == "prefix":
+            prefix_table = t
+        elif role == "suffix":
+            suffix_table = t
+
+    if not prefix_table or not suffix_table:
+        print("error: combine group must have exactly one prefix and one suffix", file=sys.stderr)
+        return
+
+    join_str = prefix_table["combine"].get("join", " ")
+
+    # Check if any tables use column_mode: select — prompt once and reuse
+    selected_column = None
+    for t in [prefix_table, suffix_table]:
+        if t.get("column_mode") == "select" and t.get("columns") and not selected_column:
+            selected_column = prompt_column_select(t["columns"])
+            break
+
+    # Roll each table and collect results
+    prefix_result = roll_on_table(prefix_table, all_tables, inline=inline,
+                                  selected_column=selected_column, _return_result=True)
+    suffix_result = roll_on_table(suffix_table, all_tables, inline=inline,
+                                  selected_column=selected_column, _return_result=True)
+
+    # For choice mode, format arrays as pick-lists
+    prefix_is_choice = prefix_table.get("column_mode") == "choice"
+    suffix_is_choice = suffix_table.get("column_mode") == "choice"
+
+    if prefix_is_choice or suffix_is_choice:
+        # Show individual rolls then combined options
+        group_name = prefix_table["combine"]["group"]
+        if inline:
+            pre = f"({prefix_result})" if prefix_is_choice else prefix_result
+            suf = f"({suffix_result})" if suffix_is_choice else suffix_result
+            print(f"{group_name} → {pre}{join_str}{suf}")
+        else:
+            print(f"{DIM}{group_name}{RESET}")
+            print(f"  {DIM}{prefix_table['name']}{RESET}: {prefix_result}")
+            print(f"  {DIM}{suffix_table['name']}{RESET}: {suffix_result}")
+    else:
+        combined = f"{prefix_result}{join_str}{suffix_result}"
+        group_name = prefix_table["combine"]["group"]
+        if inline:
+            print(f"{group_name} → {combined}")
+        else:
+            print(f"{DIM}{group_name}{RESET} → {BOLD}{combined}{RESET}")
+
+
 def parse_modifier(mod_str: str) -> int:
     """Parse a modifier string like '+2', '-1', or '1d6' into an integer."""
     mod_str = mod_str.strip()
@@ -510,4 +631,11 @@ def table_main(args: list[str], clip: bool, inline: bool = False, lonelog: bool 
     table = find_table(data, table_id)
 
     with capture(clip, lonelog):
-        roll_on_table(table, data["tables"], modifier=modifier, inline=inline)
+        # Check if this table is part of a combine group
+        combine = table.get("combine")
+        if combine:
+            group = combine["group"]
+            group_tables = [t for t in data["tables"] if t.get("combine", {}).get("group") == group]
+            roll_combine_group(group_tables, data["tables"], inline=inline)
+        else:
+            roll_on_table(table, data["tables"], modifier=modifier, inline=inline)
