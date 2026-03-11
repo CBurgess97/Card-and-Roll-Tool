@@ -12,6 +12,7 @@ from dice_cards.tables.formatting import format_result, prompt_column_select, pr
 from dice_cards.tables.output import format_roll_output, register_formatter, FORMATTERS
 from dice_cards.tables.combine import roll_combine_group
 from dice_cards.tables.cli import parse_modifier, table_main
+from dice_cards.tables.validation import check_table_file
 
 __all__ = [
     "load_table_file", "find_table",
@@ -24,5 +25,6 @@ __all__ = [
     "format_roll_output", "register_formatter", "FORMATTERS",
     "roll_combine_group",
     "parse_modifier", "table_main",
+    "check_table_file",
     "BOLD", "DIM", "CYAN", "RESET",
 ]

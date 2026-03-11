@@ -22,7 +22,9 @@ from dice_cards.tables import (
     prompt_column_select,
     prompt_choice_select,
     parse_modifier,
+    check_table_file,
 )
+from dice_cards.tables.cli import _run_check, _run_metadata, _run_print
 
 from tests.conftest import example_path
 
@@ -1330,3 +1332,274 @@ class TestAllExamplesLoad:
             assert "id" in table, f"Missing id in {filename}"
             assert "name" in table, f"Missing name in {filename}"
             assert "roll" in table, f"Missing roll in {filename}"
+
+
+# ---------------------------------------------------------------------------
+# Schema validation (--check)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckTableFile:
+    """Tests for check_table_file() schema validation."""
+
+    EXAMPLE_FILES = TestAllExamplesLoad.EXAMPLE_FILES
+
+    @pytest.mark.parametrize("filename", EXAMPLE_FILES)
+    def test_all_examples_pass_validation(self, filename):
+        """Every example file should pass validation with zero errors."""
+        data = load_table_file(example_path(filename))
+        errors = check_table_file(data)
+        assert errors == [], f"{filename} had errors: {errors}"
+
+    def test_missing_schema_version(self):
+        data = {"tables": [{"id": "t", "name": "T", "roll": {"dice": "d6"},
+                            "entries": [{"on": 1, "result": "a"}]}]}
+        errors = check_table_file(data)
+        assert any("schema_version" in e for e in errors)
+
+    def test_wrong_schema_version(self):
+        data = {"schema_version": "2.0",
+                "tables": [{"id": "t", "name": "T", "roll": {"dice": "d6"},
+                            "entries": [{"on": 1, "result": "a"}]}]}
+        errors = check_table_file(data)
+        assert any("2.0" in e for e in errors)
+
+    def test_missing_tables(self):
+        data = {"schema_version": "1.0"}
+        errors = check_table_file(data)
+        assert any("tables" in e for e in errors)
+
+    def test_duplicate_table_id(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "dup", "name": "A", "roll": {"dice": "d6"},
+             "entries": [{"on": 1, "result": "x"}]},
+            {"id": "dup", "name": "B", "roll": {"dice": "d6"},
+             "entries": [{"on": 1, "result": "y"}]},
+        ]}
+        errors = check_table_file(data)
+        assert any("duplicate" in e for e in errors)
+
+    def test_missing_required_fields(self):
+        data = {"schema_version": "1.0", "tables": [{"roll": {"dice": "d6"}}]}
+        errors = check_table_file(data)
+        assert any("id" in e for e in errors)
+        assert any("name" in e for e in errors)
+
+    def test_multiple_roll_keys(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6", "weighted": True},
+             "entries": [{"on": 1, "result": "x"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("exactly one" in e for e in errors)
+
+    def test_dice_gap_detected(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"},
+             "entries": [
+                 {"on": 1, "result": "a"},
+                 {"on": 3, "result": "c"},  # gap at 2
+             ]}
+        ]}
+        errors = check_table_file(data)
+        assert any("gap" in e for e in errors)
+
+    def test_dice_overlap_detected(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"},
+             "entries": [
+                 {"on": "1-3", "result": "a"},
+                 {"on": "3-6", "result": "b"},  # overlap at 3
+             ]}
+        ]}
+        errors = check_table_file(data)
+        assert any("overlap" in e for e in errors)
+
+    def test_weighted_missing_weight(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"weighted": True},
+             "entries": [{"result": "x"}]}  # no weight
+        ]}
+        errors = check_table_file(data)
+        assert any("weight" in e for e in errors)
+
+    def test_weighted_zero_weight(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"weighted": True},
+             "entries": [{"result": "x", "weight": 0}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("positive integer" in e for e in errors)
+
+    def test_bad_ref(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"},
+             "entries": [{"on": 1, "result": "x", "ref": "nonexistent"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("nonexistent" in e for e in errors)
+
+    def test_column_mode_select_without_columns(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"}, "column_mode": "select",
+             "entries": [{"on": 1, "result": "x"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("columns" in e for e in errors)
+
+    def test_column_mode_choice_with_columns(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"}, "column_mode": "choice",
+             "columns": [{"id": "a", "name": "A"}],
+             "entries": [{"on": 1, "result": ["x"]}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("choice" in e and "columns" in e for e in errors)
+
+    def test_result_key_mismatch(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"},
+             "columns": [{"id": "a", "name": "A"}],
+             "entries": [{"on": 1, "result": {"b": "x"}}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("not in columns" in e for e in errors)
+
+    def test_suit_domains_on_non_card(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"dice": "d6"},
+             "suit_domains": {"hearts": "Love"},
+             "entries": [{"on": 1, "result": "x"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("suit_domains" in e for e in errors)
+
+    def test_combine_missing_suffix(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "a", "name": "A", "roll": {"dice": "d6"},
+             "combine": {"group": "g", "role": "prefix"},
+             "entries": [{"on": 1, "result": "x"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("missing suffix" in e for e in errors)
+
+    def test_split_dice_with_table_entries(self):
+        data = {"schema_version": "1.0", "tables": [
+            {"id": "t", "name": "T", "roll": {"split_dice": [
+                {"id": "a", "name": "A", "dice": "d6",
+                 "entries": [{"on": 1, "result": "x"}]}
+            ]}, "entries": [{"on": 1, "result": "bad"}]}
+        ]}
+        errors = check_table_file(data)
+        assert any("table-level" in e for e in errors)
+
+
+class TestRunCheck:
+    """Tests for the --check CLI command."""
+
+    def test_valid_file(self, capsys):
+        _run_check([example_path("simple-d6.yml")])
+        out = capsys.readouterr().out
+        assert "ok" in out
+
+    def test_multiple_files(self, capsys):
+        _run_check([example_path("simple-d6.yml"), example_path("weighted.yml")])
+        out = capsys.readouterr().out
+        assert out.count("ok") == 2
+
+    def test_no_args_exits(self):
+        with pytest.raises(SystemExit):
+            _run_check([])
+
+
+# ---------------------------------------------------------------------------
+# Metadata display (--metadata)
+# ---------------------------------------------------------------------------
+
+
+class TestRunMetadata:
+    """Tests for the --metadata CLI command."""
+
+    def test_shows_metadata(self, capsys):
+        _run_metadata([example_path("simple-d6.yml")])
+        out = capsys.readouterr().out
+        assert "1.0" in out
+        assert "Simple d6 Table Example" in out
+        assert "Table Schema Project" in out
+
+    def test_shows_table_count(self, capsys):
+        _run_metadata([example_path("prefix-suffix.yml")])
+        out = capsys.readouterr().out
+        assert "Tables" in out
+        assert "2" in out
+
+    def test_shows_table_names(self, capsys):
+        _run_metadata([example_path("multi-column.yml")])
+        out = capsys.readouterr().out
+        assert "Random Tavern Patron" in out
+
+    def test_no_args_exits(self):
+        with pytest.raises(SystemExit):
+            _run_metadata([])
+
+
+# ---------------------------------------------------------------------------
+# Table print (--print)
+# ---------------------------------------------------------------------------
+
+
+class TestRunPrint:
+    """Tests for the --print CLI command."""
+
+    def test_prints_simple_table(self, capsys):
+        _run_print([example_path("simple-d6.yml")])
+        out = capsys.readouterr().out
+        assert "Wandering NPC Mood" in out
+        assert "Hostile" in out
+        assert "Generous" in out
+
+    def test_prints_multi_column(self, capsys):
+        _run_print([example_path("multi-column.yml")])
+        out = capsys.readouterr().out
+        assert "Name:" in out
+        assert "Occupation:" in out
+        assert "Aldric" in out
+
+    def test_prints_weighted(self, capsys):
+        _run_print([example_path("weighted.yml")])
+        out = capsys.readouterr().out
+        assert "Pack of wolves" in out
+        assert "w:" in out
+
+    def test_prints_card_table(self, capsys):
+        _run_print([example_path("card-draw.yml")])
+        out = capsys.readouterr().out
+        assert "Fortune Reading" in out
+        assert "suit:hearts" in out
+
+    def test_prints_split_dice(self, capsys):
+        _run_print([example_path("split-dice.yml")])
+        out = capsys.readouterr().out
+        assert "Action" in out
+        assert "Subject" in out
+
+    def test_prints_choice(self, capsys):
+        _run_print([example_path("prefix-suffix-choice.yml")])
+        out = capsys.readouterr().out
+        assert "Aldric / Aldwin" in out
+
+    def test_prints_select_column(self, capsys):
+        _run_print([example_path("select-column.yml")])
+        out = capsys.readouterr().out
+        assert "Columns" in out
+        assert "Human" in out
+
+    def test_prints_subtable_ref(self, capsys):
+        _run_print([example_path("nested-subtable.yml"), "treasure_hoard"])
+        out = capsys.readouterr().out
+        assert "subtable" in out
+        assert "ref" in out
+
+    def test_no_args_exits(self):
+        with pytest.raises(SystemExit):
+            _run_print([])
